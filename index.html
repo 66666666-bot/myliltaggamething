@@ -1,0 +1,123 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Tag - CoolVibeHub</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-image: url('background.jpg');
+        }
+        canvas {
+            display: block;
+            background-color: #f0f0f0;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <p>This is online tag! took me a whole day to make, hope u enjoy :></p>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let players = {};
+        let playerId;
+
+        socket.on('playerList', data => {
+            players = data;
+            playerId = socket.id;
+        });
+
+        socket.on('playerMoved', data => {
+            players[data.id] = { ...players[data.id], x: data.x, y: data.y };
+        });
+
+        socket.on('playerDisconnected', id => {
+            delete players[id];
+        });
+
+        socket.on('newItPlayer', id => {
+            players[id].it = true;
+            console.log("New it player:", id);
+        });
+
+        socket.on('playerTagged', ({ itPlayerId, taggedPlayerId }) => {
+            players[itPlayerId].it = false;
+            players[taggedPlayerId].it = true;
+            console.log("Player tagged - New it player:", taggedPlayerId);
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            socket.emit('move', { x, y });
+        });
+
+        canvas.addEventListener('click', () => {
+            for (const id in players) {
+                const player = players[id];
+                if (playerId !== id && Math.abs(player.x - players[playerId].x) < 20 && Math.abs(player.y - players[playerId].y) < 20) {
+                    socket.emit('tag', id);
+                    break;
+                }
+            }
+        });
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (const id in players) {
+                const player = players[id];
+                ctx.fillStyle = player.it ? 'red' : 'blue';
+                ctx.fillRect(player.x, player.y, 20, 20); // Draw players as squares
+            }
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+        
+        // Function to select a random player as the "it" player
+        function selectNewItPlayer() {
+            console.log("Selecting new it player...");
+            const playerIds = Object.keys(players);
+            if (playerIds.length > 0) {
+                itPlayerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+                players[itPlayerId].it = true;
+                io.emit('newItPlayer', itPlayerId);
+                console.log("New it player selected:", itPlayerId);
+            } else {
+                itPlayerId = null; // No players left, reset itPlayerId
+                console.log("No players left, reset itPlayerId");
+            }
+        }
+
+        // Periodically check if the "it" player is still connected
+        setInterval(() => {
+            if (itPlayerId && !players[itPlayerId]) {
+                selectNewItPlayer();
+            }
+        }, 10); // Check every 10 seconds (adjust as needed)
+        canvas.addEventListener('click', () => {
+    for (const id in players) {
+        const player = players[id];
+        if (playerId !== id && Math.abs(player.x - players[playerId].x) < 20 && Math.abs(player.y - players[playerId].y) < 20) {
+            socket.emit('tag', id);
+            location.reload(); // Refresh the page after tagging someone
+            break;
+        }
+    }
+});
+
+        
+    </script>
+</body>
+</html>
